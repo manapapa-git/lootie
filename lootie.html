@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>アライグマタワーバトル風</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #1e1e1e;
+      color: #fff;
+      font-family: "Noto Sans JP", system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+      box-sizing: border-box;
+      gap: 16px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      letter-spacing: 0.08em;
+      text-align: center;
+    }
+    #hud {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .stat {
+      min-width: 120px;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 8px 16px;
+      text-align: center;
+      background: linear-gradient(180deg, #2a2a2a, #212121);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .stat-label {
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      color: #aaa;
+    }
+    .stat-value {
+      font-size: 30px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    #reset-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 24px;
+      background: #ff793f;
+      color: #fff;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    #reset-btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    #message {
+      min-height: 24px;
+      font-size: 15px;
+      text-align: center;
+      color: #ffe7b0;
+    }
+    #game-wrapper {
+      width: 520px;
+      max-width: 100%;
+      border-radius: 20px;
+      border: 2px solid #555;
+      padding: 10px;
+      background: #2a2a2a;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+    }
+    #game-container {
+      width: 480px;
+      max-width: 100%;
+      height: 640px;
+      margin: 0 auto;
+      background: #333;
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      border-radius: 14px;
+    }
+    #info {
+      max-width: 480px;
+      text-align: center;
+      line-height: 1.8;
+      font-size: 14px;
+      color: #ccc;
+    }
+    @media (max-width: 480px) {
+      body {
+        padding: 16px 8px 32px;
+      }
+      h1 {
+        font-size: 26px;
+      }
+      #game-wrapper { width: 100%; padding: 8px; }
+      #game-container { width: 100%; height: 560px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Lootoeタワーバトル（※某タワーやLootGO運営は一切関係ありません）</h1>
+  <div id="hud">
+    <div class="stat">
+      <div class="stat-label">STACK</div>
+      <div class="stat-value" id="score">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">BEST</div>
+      <div class="stat-value" id="best-score">0</div>
+    </div>
+    <button id="reset-btn">リセット</button>
+  </div>
+  <div id="message">タップ / クリックでアライグマを出そう！</div>
+  <div id="game-wrapper">
+    <div id="game-container"></div>
+  </div>
+  <div id="info">
+    1回目のタップ / クリック：アライグマを出す<br>
+    2回目のタップ / クリック：そのアライグマを落とす<br>
+    （また 1回タップすると次のアライグマが出る）<br>
+    マウス / タッチで左右に動かして位置を決める<br>
+    スペースキー：今のアライグマを回転（PCのみ）<br>
+    画面の外（台から下）に落ちたらゲームオーバー
+  </div>
+
+  <!-- Matter.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+  <script>
+    (function () {
+      const { Engine, Render, Runner, Bodies, Composite, Body, Events } = Matter;
+
+      const width = 480;
+      const height = 640;
+      const dropY = 90;
+      const loseLineY = height - 12;
+      const platformY = height - 150;
+      const PLATFORM_WIDTH = 200;
+      const pointerClampMargin = 60;
+
+      const RACOON_WIDTH = 130;
+      const RACOON_HEIGHT = 160;
+      const RACOON_TEXTURE = "lootie.png";
+      const RACOON_SCALE = 0.14;
+      const RACOON_POLYGON = [
+        { x: -0.92, y: -0.12 },
+        { x: -0.8, y: -0.45 },
+        { x: -0.5, y: -0.95 },
+        { x: -0.1, y: -1.1 },
+        { x: 0.15, y: -1.1 },
+        { x: 0.55, y: -0.95 },
+        { x: 0.92, y: -0.28 },
+        { x: 0.95, y: 0.25 },
+        { x: 0.78, y: 0.75 },
+        { x: 0.35, y: 1.05 },
+        { x: -0.15, y: 1.08 },
+        { x: -0.45, y: 0.95 },
+        { x: -0.7, y: 0.65 },
+        { x: -0.95, y: 0.2 }
+      ];
+
+      const scoreEl = document.getElementById("score");
+      const bestEl = document.getElementById("best-score");
+      const messageEl = document.getElementById("message");
+      const resetBtn = document.getElementById("reset-btn");
+      const storedBest = Number(localStorage.getItem("raccoon-stack-best") || "0");
+      let bestScore = storedBest;
+      bestEl.textContent = bestScore;
+
+      // === Audio synthesized with Web Audio API ===
+      let audioCtx = null;
+      let masterGain = null;
+      let bgmInterval = null;
+
+      function ensureAudioActivated() {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 0.25;
+          masterGain.connect(audioCtx.destination);
+        } else if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+        if (!bgmInterval) {
+          startBgm();
+        }
+      }
+
+      function playTone(freq, duration = 0.25, volume = 0.4, type = "sine", startTime) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.value = volume;
+        osc.connect(gain);
+        gain.connect(masterGain);
+        const now = startTime ?? audioCtx.currentTime;
+        osc.start(now);
+        gain.gain.setValueAtTime(volume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc.stop(now + duration);
+      }
+
+      function startBgm() {
+        if (!audioCtx) return;
+        if (bgmInterval) return;
+        const melody = [523, 587, 659, 587, 659, 698, 659, 587];
+        let step = 0;
+        bgmInterval = setInterval(() => {
+          playTone(melody[step], 0.3, 0.12, "triangle");
+          step = (step + 1) % melody.length;
+        }, 360);
+      }
+
+      function stopBgm() {
+        if (bgmInterval) {
+          clearInterval(bgmInterval);
+          bgmInterval = null;
+        }
+      }
+
+      function playDropSound() {
+        playTone(392, 0.18, 0.5, "square");
+      }
+
+      function playCollisionSound() {
+        playTone(330, 0.12, 0.35, "triangle");
+      }
+
+      function playGameOverSound() {
+        if (!audioCtx) return;
+        const seq = [659, 587, 523, 392];
+        const interval = 0.22;
+        seq.forEach((freq, idx) => {
+          playTone(freq, 0.25, 0.5, "sine", audioCtx.currentTime + idx * interval);
+        });
+      }
+
+      const engine = Engine.create();
+      engine.world.gravity.y = 1.1;
+
+      const render = Render.create({
+        element: document.getElementById("game-container"),
+        engine,
+        options: {
+          width,
+          height,
+          wireframes: false,
+          background: "#2c2c2c"
+        }
+      });
+      Render.run(render);
+
+      const runner = Runner.create();
+      Runner.run(runner, engine);
+
+      const world = engine.world;
+
+      // === World setup ===
+      const platform = Bodies.rectangle(width / 2, platformY, PLATFORM_WIDTH, 26, {
+        isStatic: true,
+        label: "platform",
+        render: { fillStyle: "#777" }
+      });
+
+      const ceiling = Bodies.rectangle(width / 2, -30, width, 60, {
+        isStatic: true,
+        render: { visible: false }
+      });
+      const wallLeft = Bodies.rectangle(-20, height / 2, 40, height, {
+        isStatic: true,
+        render: { visible: false }
+      });
+      const wallRight = Bodies.rectangle(width + 20, height / 2, 40, height, {
+        isStatic: true,
+        render: { visible: false }
+      });
+
+      Composite.add(world, [platform, ceiling, wallLeft, wallRight]);
+
+      let currentBody = null;
+      let isReadyToDrop = false;
+      let pointerX = width / 2;
+      let isGameOver = false;
+      let score = 0;
+      let lastCollisionSoundTime = 0;
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function pairHasRaccoon(pair) {
+        return pair.bodyA.label === "raccoon" || pair.bodyB.label === "raccoon";
+      }
+
+      function createRaccoonBody(x, y, isStatic) {
+        const scaledVerts = RACOON_POLYGON.map((point) => ({
+          x: point.x * (RACOON_WIDTH / 2),
+          y: point.y * (RACOON_HEIGHT / 2)
+        }));
+
+        const body = Bodies.fromVertices(
+          x,
+          y,
+          [scaledVerts],
+          {
+            label: "raccoon",
+            friction: 0.6,
+            frictionStatic: 0.8,
+            restitution: 0.05,
+            render: {
+              fillStyle: "#f39c12",
+              sprite: {
+                texture: RACOON_TEXTURE,
+                xScale: RACOON_SCALE,
+                yScale: RACOON_SCALE
+              }
+            }
+          },
+          true
+        );
+        Body.setStatic(body, isStatic);
+        return body;
+      }
+
+      function updatePointer(clientX) {
+        const rect = render.canvas.getBoundingClientRect();
+        const scaleX = width / rect.width;
+        const localX = (clientX - rect.left) * scaleX;
+        const clamped = clamp(localX, pointerClampMargin, width - pointerClampMargin);
+        pointerX = clamped;
+        if (currentBody && isReadyToDrop) {
+          Body.setPosition(currentBody, { x: pointerX, y: dropY });
+        }
+      }
+
+      function spawnRacoon() {
+        if (isGameOver || currentBody) return;
+
+        const body = createRaccoonBody(pointerX, dropY, true);
+        Composite.add(world, body);
+
+        currentBody = body;
+        isReadyToDrop = true;
+        setMessage("左右へ動かして狙いを定めてね");
+      }
+
+      function dropRacoon() {
+        if (!isReadyToDrop || !currentBody) return;
+
+        playDropSound();
+        const dropPos = { x: currentBody.position.x, y: currentBody.position.y };
+        const dropAngle = currentBody.angle;
+
+        Composite.remove(world, currentBody);
+        const fallingBody = createRaccoonBody(dropPos.x, dropPos.y, false);
+        Body.setAngle(fallingBody, dropAngle);
+        Body.setVelocity(fallingBody, { x: 0, y: 0 });
+        Body.setAngularVelocity(fallingBody, 0);
+        Composite.add(world, fallingBody);
+
+        isReadyToDrop = false;
+        currentBody = null;
+        score += 1;
+        updateScore();
+        setMessage("うまく乗った？ 次のアライグマを出そう");
+      }
+
+      function setMessage(text) {
+        messageEl.textContent = text;
+      }
+
+      function updateScore() {
+        scoreEl.textContent = score;
+        if (score > bestScore) {
+          bestScore = score;
+          bestEl.textContent = bestScore;
+          localStorage.setItem("raccoon-stack-best", String(bestScore));
+        }
+      }
+
+      function checkGameOver() {
+        if (isGameOver) return;
+        const bodies = Composite.allBodies(world);
+        for (const body of bodies) {
+          if (body.label === "raccoon" && body.position.y > loseLineY) {
+            triggerGameOver();
+            break;
+          }
+        }
+      }
+
+      function triggerGameOver() {
+        isGameOver = true;
+        setMessage("ゲームオーバー… リセットしてもう一度挑戦しよう！");
+        stopBgm();
+        playGameOverSound();
+      }
+
+      function resetGame() {
+        const bodies = Composite.allBodies(world);
+        bodies.forEach((body) => {
+          if (body.label === "raccoon") {
+            Composite.remove(world, body);
+          }
+        });
+        currentBody = null;
+        isReadyToDrop = false;
+        isGameOver = false;
+        stopBgm();
+        startBgm();
+        score = 0;
+        updateScore();
+        pointerX = width / 2;
+        setMessage("タップ / クリックでアライグマを出そう！");
+      }
+
+      const canvas = render.canvas;
+      canvas.style.touchAction = "none";
+
+      canvas.addEventListener("pointermove", (e) => {
+        updatePointer(e.clientX);
+      });
+
+      canvas.addEventListener("pointerdown", (e) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        ensureAudioActivated();
+        updatePointer(e.clientX);
+        if (isGameOver) return;
+
+        if (!currentBody) {
+          spawnRacoon();
+        } else if (isReadyToDrop) {
+          dropRacoon();
+        }
+      });
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" && currentBody && isReadyToDrop) {
+          e.preventDefault();
+          Body.rotate(currentBody, Math.PI / 12);
+          ensureAudioActivated();
+        }
+      });
+
+      resetBtn.addEventListener("click", () => {
+        resetGame();
+      });
+
+      Events.on(engine, "afterUpdate", () => {
+        checkGameOver();
+      });
+
+      Events.on(engine, "collisionStart", (event) => {
+        const now = Date.now();
+        for (const pair of event.pairs) {
+          if (pairHasRaccoon(pair) && now - lastCollisionSoundTime > 200) {
+            playCollisionSound();
+            lastCollisionSoundTime = now;
+            break;
+          }
+        }
+      });
+
+      // Draw helper lines & labels after rendering each frame
+      Events.on(render, "afterRender", () => {
+        const ctx = render.context;
+        ctx.save();
+
+        // Drop guide
+        ctx.strokeStyle = "#ffffff44";
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(pointerX, 0);
+        ctx.lineTo(pointerX, dropY - 10);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Platform highlight
+        ctx.fillStyle = "#888";
+        ctx.fillRect(width / 2 - PLATFORM_WIDTH / 2, platformY - 13, PLATFORM_WIDTH, 26);
+
+        // Lose line marker
+        ctx.strokeStyle = "#ff5f5f55";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, loseLineY);
+        ctx.lineTo(width, loseLineY);
+        ctx.stroke();
+
+        ctx.restore();
+      });
+
+      // 初期化
+      resetGame();
+    })();
+  </script>
+</body>
+</html>
