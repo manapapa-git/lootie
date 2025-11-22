@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>アライグマタワーバトル風</title>
+  <title>Lootoeタワーバトル</title>
   <style>
     :root {
       color-scheme: dark;
@@ -128,16 +128,16 @@
     </div>
     <button id="reset-btn">リセット</button>
   </div>
-  <div id="message">タップ / クリックでアライグマを出そう！</div>
+  <div id="message">タップ / クリックでLootieを出そう！</div>
   <div id="game-wrapper">
     <div id="game-container"></div>
   </div>
   <div id="info">
-    1回目のタップ / クリック：アライグマを出す<br>
-    2回目のタップ / クリック：そのアライグマを落とす<br>
-    （また 1回タップすると次のアライグマが出る）<br>
+    1回目のタップ / クリック：Lootieを出す<br>
+    2回目のタップ / クリック：そのLootieを落とす<br>
+    （また 1回タップすると次のLootieが出る）<br>
     マウス / タッチで左右に動かして位置を決める<br>
-    スペースキー：今のアライグマを回転（PCのみ）<br>
+    スペースキー：今のLootieを回転（PCのみ）<br>
     画面の外（台から下）に落ちたらゲームオーバー
   </div>
 
@@ -382,7 +382,7 @@
         currentBody = null;
         score += 1;
         updateScore();
-        setMessage("うまく乗った？ 次のアライグマを出そう");
+        setMessage("うまく乗った？ 次のLootieを出そう");
       }
 
       function setMessage(text) {
@@ -431,7 +431,7 @@
         score = 0;
         updateScore();
         pointerX = width / 2;
-        setMessage("タップ / クリックでアライグマを出そう！");
+        setMessage("タップ / クリックでLootieを出そう！");
       }
 
       const canvas = render.canvas;
